@@ -1,18 +1,16 @@
 "use client"
 
-import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Image from "next/image"
 
 interface DetectionResult {
+  status: string
   predicted_class: string
   confidence: number
-  class_probabilities: {
-    [key: string]: number
-  }
+  processed_image: string
+  timestamp: string
 }
 
 export default function PhotoDetection() {
@@ -25,7 +23,8 @@ export default function PhotoDetection() {
     if (e.target.files) {
       const selectedFile = e.target.files[0]
       setFile(selectedFile)
-      setPreview(URL.createObjectURL(selectedFile))
+      const url = URL.createObjectURL(selectedFile)
+      setPreview(url)
       setResult(null)
     }
   }
@@ -58,66 +57,94 @@ export default function PhotoDetection() {
   }
 
   return (
-    <div className="space-y-6 max-w-lg mx-auto p-4">
-      <Card className="p-4">
+    <div className="container mx-auto p-4">
+      <Card className="max-w-3xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-center text-xl">Photo Detection</CardTitle>
+          <CardTitle className="text-center text-2xl">Photo Classification</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4 flex flex-col items-center">
-            <Input type="file" accept="image/*" onChange={handleFileChange} />
-            {preview && (
-              <div className="w-full flex justify-center">
-                <Image
-                  src={preview}
-                  alt="Uploaded Preview"
-                  width={300}
-                  height={300}
-                  className="rounded-lg shadow-md border border-gray-200"
-                />
+          <div className="space-y-6">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <Input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleFileChange} 
+                className="cursor-pointer"
+              />
+              <Button type="submit" disabled={!file || loading}>
+                {loading ? "Processing..." : "Analyze Photo"}
+              </Button>
+            </form>
+
+            {preview && result && (
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Original Image */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle className="text-center text-lg">Original Photo</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={preview}
+                        alt="Original"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Detection Result */}
+                <Card className="overflow-hidden border-2 border-primary">
+                  <CardHeader>
+                    <CardTitle className="text-center text-lg">Detection Result</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={result.processed_image}
+                        alt="Detection Result"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-center space-y-2 bg-primary/10 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-primary">
+                        {result.predicted_class}
+                      </p>
+                      <p className="text-lg font-medium">
+                        Confidence: {(result.confidence * 100).toFixed(1)}%
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Analyzed at: {new Date(result.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Detecting..." : "Detect Objects"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-      
-      {result && (
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle className="text-center text-lg">Detection Results</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center">
-              <p className="text-lg font-semibold">
-                Detected: <span className="text-primary">{result.predicted_class}</span>
-              </p>
-              <p>
-                Confidence: {(result.confidence * 100).toFixed(2)}%
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <p className="font-medium">Class Probabilities:</p>
-              {Object.entries(result.class_probabilities).map(([className, probability]) => (
-                <div key={className} className="flex items-center gap-2">
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div
-                      className="bg-primary h-2.5 rounded-full"
-                      style={{ width: `${probability * 100}%` }}
+
+            {preview && !result && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-lg">Preview</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="w-full h-full object-contain"
                     />
                   </div>
-                  <span className="min-w-[100px] text-sm">
-                    {className}: {(probability * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -7,22 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 
 interface DetectionResult {
+  status: string
   predicted_class: string
   confidence: number
-  frame_results: Array<{
-    predicted_class: string
-    confidence: number
-    class_probabilities: {
-      [key: string]: number
-    }
-  }>
+  processed_image: string
+  timestamp: string
 }
 
 export default function VideoDetection() {
   const [file, setFile] = useState<File | null>(null)
+  const [fileName, setFileName] = useState<string>("")
   const [result, setResult] = useState<DetectionResult | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
-  const [fileName, setFileName] = useState<string>("")
+  const [preview, setPreview] = useState<string | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -30,6 +27,10 @@ export default function VideoDetection() {
       setFile(selectedFile)
       setFileName(selectedFile.name)
       setResult(null)
+
+      // Create video preview URL
+      const url = URL.createObjectURL(selectedFile)
+      setPreview(url)
     }
   }
 
@@ -61,103 +62,109 @@ export default function VideoDetection() {
   }
 
   return (
-    <div className="space-y-6 max-w-lg mx-auto p-4">
-      <Card className="p-4">
+    <div className="container mx-auto p-4">
+      <Card className="max-w-3xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-center text-xl">Video Detection</CardTitle>
+          <CardTitle className="text-center text-2xl">Video Classification</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Input 
-                type="file" 
-                accept="video/*"
-                onChange={handleFileChange}
-                className="cursor-pointer"
-              />
-              {fileName && (
-                <p className="text-sm text-gray-500">
-                  Selected: {fileName}
-                </p>
-              )}
-            </div>
-            
-            <Button 
-              type="submit" 
-              disabled={loading || !file} 
-              className="w-full"
-            >
-              {loading ? "Processing Video..." : "Detect Objects"}
-            </Button>
-
-            {loading && (
+          <div className="space-y-6">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="space-y-2">
-                <Progress value={33} />
-                <p className="text-sm text-center text-gray-500">
-                  Processing video frames...
-                </p>
+                <Input 
+                  type="file" 
+                  accept="video/*"
+                  onChange={handleFileChange}
+                  className="cursor-pointer"
+                />
+                {fileName && (
+                  <p className="text-sm text-gray-500">
+                    Selected: {fileName}
+                  </p>
+                )}
               </div>
-            )}
-          </form>
-        </CardContent>
-      </Card>
+              
+              <Button type="submit" disabled={!file || loading}>
+                {loading ? "Processing..." : "Analyze Video"}
+              </Button>
 
-      {result && (
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle className="text-center text-lg">Detection Results</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center">
-              <p className="text-lg font-semibold">
-                Dominant Class: <span className="text-primary">{result.predicted_class}</span>
-              </p>
-              <p>
-                Overall Confidence: {(result.confidence * 100).toFixed(2)}%
-              </p>
-            </div>
+              {loading && (
+                <div className="space-y-2">
+                  <Progress value={33} className="bg-primary/20" />
+                  <p className="text-sm text-center text-gray-500">
+                    Processing video frames...
+                  </p>
+                </div>
+              )}
+            </form>
 
-            <div className="space-y-2">
-              <p className="font-medium">Frame Analysis:</p>
-              <div className="max-h-60 overflow-y-auto space-y-2 border rounded-lg p-2">
-                {result.frame_results.map((frame, index) => (
-                  <div key={index} className="p-2 bg-gray-50 rounded">
-                    <p className="text-sm">
-                      Frame {index + 1}: {frame.predicted_class} 
-                      ({(frame.confidence * 100).toFixed(1)}%)
-                    </p>
-                    <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                      <div
-                        className="bg-primary h-1.5 rounded-full"
-                        style={{ width: `${frame.confidence * 100}%` }}
+            {preview && result && (
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Original Video Preview */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle className="text-center text-lg">Original Video</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="aspect-video relative bg-gray-100 rounded-lg overflow-hidden">
+                      <video
+                        src={preview}
+                        controls
+                        className="w-full h-full object-contain"
                       />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                  </CardContent>
+                </Card>
 
-            <div className="space-y-2">
-              <p className="font-medium">Statistics:</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gray-50 p-2 rounded">
-                  <p className="text-sm">Total Frames</p>
-                  <p className="text-lg font-semibold">
-                    {result.frame_results.length}
-                  </p>
-                </div>
-                <div className="bg-gray-50 p-2 rounded">
-                  <p className="text-sm">Avg. Confidence</p>
-                  <p className="text-lg font-semibold">
-                    {(result.frame_results.reduce((acc, curr) => acc + curr.confidence, 0) / 
-                      result.frame_results.length * 100).toFixed(1)}%
-                  </p>
-                </div>
+                {/* Detection Result */}
+                <Card className="overflow-hidden border-2 border-primary">
+                  <CardHeader>
+                    <CardTitle className="text-center text-lg">Detection Result</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="aspect-video relative bg-gray-100 rounded-lg overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={result.processed_image}
+                        alt="Detection Result"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="text-center space-y-2 bg-primary/10 rounded-lg p-4">
+                      <p className="text-2xl font-bold text-primary">
+                        {result.predicted_class}
+                      </p>
+                      <p className="text-lg font-medium">
+                        Confidence: {(result.confidence * 100).toFixed(1)}%
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Analyzed at: {new Date(result.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            )}
+
+            {preview && !result && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-lg">Preview</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video relative bg-gray-100 rounded-lg overflow-hidden">
+                    <video
+                      src={preview}
+                      controls
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
