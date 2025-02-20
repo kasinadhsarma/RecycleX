@@ -205,6 +205,14 @@ export default function LiveDetection() {
                     ({(liveResult.confidence * 100).toFixed(1)}%)
                   </span>
                 </p>
+                <div className="aspect-video relative bg-gray-100 rounded-lg overflow-hidden mt-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={liveResult.processed_image}
+                    alt="Live Detection Result"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
               </div>
             )}
           </div>
