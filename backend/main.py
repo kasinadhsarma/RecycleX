@@ -1,7 +1,11 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import tensorflow as tf
+import torch
+import torch.nn as nn
+import torchvision
+import torchvision.transforms as transforms
+import torchvision.models as models
 import numpy as np
 import cv2
 import os
@@ -129,13 +133,16 @@ async def process_image(image: np.ndarray) -> dict:
             image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
         
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = tf.keras.applications.efficientnet.preprocess_input(image)
-        image = np.expand_dims(image, axis=0)
+        image = transforms.ToTensor()(image)
+        image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
+        image = image.unsqueeze(0).to(device)
 
         # Make prediction
-        prediction = model.predict(image, verbose=0)
-        predicted_class = CATEGORIES[np.argmax(prediction[0])]
-        confidence = float(np.max(prediction[0]))
+        with torch.no_grad():
+            outputs = model(image)
+            _, predicted = torch.max(outputs, 1)
+            predicted_class = CATEGORIES[predicted.item()]
+            confidence = torch.nn.functional.softmax(outputs, dim=1)[0][predicted.item()].item()
 
         # Draw detection on original image
         result_image = draw_detection(original_image, predicted_class, confidence)
@@ -226,7 +233,12 @@ async def predict_video(
         result = process_video(
             temp_path,
             model,
-            tf.keras.applications.efficientnet.preprocess_input,
+            transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ]),
             CATEGORIES
         )
 
@@ -249,42 +261,39 @@ async def health_check():
         "version": Config.API_VERSION
     }
 
-# Load the model
+# Load the PyTorch model
 print("Loading model...")
 try:
-    img_size = 224
-    base_model = tf.keras.applications.EfficientNetB4(
-        weights='imagenet', 
-        include_top=False, 
-        input_shape=(img_size, img_size, 3)
-    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_path = os.path.join(os.path.dirname(__file__), "TrashNet_Model.pth")
     
-    inputs = base_model.input
-    x = base_model.output
-    x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x1 = tf.keras.layers.Dense(1024, activation='relu')(x)
-    x1 = tf.keras.layers.BatchNormalization()(x1)
-    x1 = tf.keras.layers.Dropout(0.5)(x1)
-    x2 = tf.keras.layers.Dense(512, activation='relu')(x1)
-    x2 = tf.keras.layers.BatchNormalization()(x2)
-    x2 = tf.keras.layers.Dropout(0.4)(x2)
-    x2 = tf.keras.layers.Add()([x2, tf.keras.layers.Dense(512)(x1)])
-    x3 = tf.keras.layers.Dense(256, activation='relu')(x2)
-    x3 = tf.keras.layers.BatchNormalization()(x3)
-    x3 = tf.keras.layers.Dropout(0.3)(x3)
-    x3 = tf.keras.layers.Add()([x3, tf.keras.layers.Dense(256)(x2)])
-    outputs = tf.keras.layers.Dense(len(CATEGORIES), activation='softmax')(x3)
+    class EfficientNetB4Custom(nn.Module):
+        def __init__(self, num_classes):
+            super(EfficientNetB4Custom, self).__init__()
+            self.base_model = models.efficientnet_b4(pretrained=True)
+            self.base_model.classifier = nn.Sequential(
+                nn.Linear(1792, 1024),
+                nn.ReLU(),
+                nn.BatchNorm1d(1024),
+                nn.Dropout(0.5),
+                nn.Linear(1024, 512),
+                nn.ReLU(),
+                nn.BatchNorm1d(512),
+                nn.Dropout(0.4),
+                nn.Linear(512, 256),
+                nn.ReLU(),
+                nn.BatchNorm1d(256),
+                nn.Dropout(0.3),
+                nn.Linear(256, num_classes)
+            )
 
-    model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    
-    model_path = os.path.join(os.path.dirname(__file__), "TrashNet_Model.h5")
+        def forward(self, x):
+            return self.base_model(x)
+
+    model = EfficientNetB4Custom(num_classes=len(CATEGORIES)).to(device)
     if os.path.exists(model_path):
-        model.load_weights(model_path)
-        model.compile(
-            optimizer='adam',
-            loss='categorical_crossentropy',
-            metrics=['accuracy']
-        )
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
         print("Model loaded successfully")
     else:
         raise FileNotFoundError("Model file not found.")

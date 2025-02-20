@@ -26,3 +26,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dataset-resized/
+TrashNet_Model.h5
+best.h5
+TrashNet_Model.pth
+best_model.pth

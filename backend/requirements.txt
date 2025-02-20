@@ -7,3 +7,5 @@ tensorflow==2.14.0
 Pillow==10.1.0
 python-jose==3.3.0
 websockets==12.0
+torch==2.0.1
+torchvision==0.15.2
