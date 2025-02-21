@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import torch
 from typing import List, Dict
 import base64
 import tempfile
@@ -88,9 +89,13 @@ def process_video(video_path: str, model, preprocess_func, categories: List[str]
                 input_frame = np.expand_dims(input_frame, axis=0)
 
                 # Make prediction
-                prediction = model.predict(input_frame, verbose=0)
-                predicted_class = categories[np.argmax(prediction[0])]
-                confidence = float(np.max(prediction[0]))
+                input_tensor = torch.from_numpy(input_frame).float().to(next(model.parameters()).device)
+                with torch.no_grad():
+                    outputs = model(input_tensor)
+                    probabilities = torch.nn.functional.softmax(outputs, dim=1)[0]
+                    predicted_idx = torch.argmax(probabilities).item()
+                    predicted_class = categories[predicted_idx]
+                    confidence = float(probabilities[predicted_idx])
 
                 # Update statistics
                 class_counts[predicted_class] = class_counts.get(predicted_class, 0) + 1

@@ -170,22 +170,33 @@ async def predict_live(websocket: WebSocket):
     try:
         while True:
             try:
+                # Check if connection is closed before receiving
                 data = await websocket.receive_text()
+                
+                # Process the frame
                 img_bytes = base64.b64decode(data.split(',')[1])
                 img = Image.open(BytesIO(img_bytes))
                 image = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
                 
-                # Process frame
                 result = await process_image(image)
                 await websocket.send_json(result)
                 
+            except RuntimeError as e:
+                if "disconnect" in str(e).lower():
+                    logger.info("Client disconnected")
+                    break
+                logger.error(f"Runtime error: {e}")
+                break
+                
             except Exception as e:
                 logger.error(f"Error processing frame: {e}")
-                continue
-    except Exception as e:
-        logger.error(f"WebSocket connection error: {e}")
+                # Only continue if it's a processing error, not a connection error
+                if "disconnect" not in str(e).lower():
+                    continue
+                break
     
-    logger.info("WebSocket connection closed")
+    finally:
+        logger.info("WebSocket connection closed")
 
 @app.post("/predict/image")
 async def predict_image(file: UploadFile = File(...)):
